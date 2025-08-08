@@ -1,0 +1,69 @@
+{
+  "name": "scintirete",
+  "version": "0.1.0",
+  "description": "TypeScript SDK for Scintirete Vector Database",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "gen": "mkdir -p gen/ts && protoc --plugin=./node_modules/.bin/protoc-gen-ts_proto --ts_proto_out=./gen/ts --ts_proto_opt=esModuleInterop=true,outputServices=grpc-js,env=node,outputJsonMethods=true,forceLong=string --proto_path=./schemas/proto ./schemas/proto/scintirete/v1/scintirete.proto",
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "clean": "rm -rf dist gen",
+    "prepublishOnly": "npm run clean && npm run gen && npm run build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "vitest run --config ./vitest.e2e.config.ts",
+    "lint": "eslint src --ext .ts",
+    "lint:fix": "eslint src --ext .ts --fix",
+    "typecheck": "tsc --noEmit",
+    "check": "npm run gen && npm run typecheck && npm run lint && npm run build && npm run test"
+  },
+  "keywords": [
+    "vector",
+    "database",
+    "grpc",
+    "typescript",
+    "scintirete",
+    "embedding",
+    "similarity-search"
+  ],
+  "author": "Scintirete Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Scintirete/scintirete-sdk-node.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Scintirete/scintirete-sdk-node/issues"
+  },
+  "homepage": "https://github.com/Scintirete/Scintirete/",
+  "dependencies": {
+    "@grpc/grpc-js": "^1.10.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "eslint": "^8.0.0",
+    "ts-proto": "^1.170.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

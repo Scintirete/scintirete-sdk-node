@@ -1,0 +1,316 @@
+syntax = "proto3";
+
+package scintirete.v1;
+
+import "google/protobuf/struct.proto";
+
+option go_package = "github.com/scintirete/scintirete/gen/go/scintirete/v1;scintiretev1";
+
+// ===================================
+// 主服务定义
+// ===================================
+
+// ScintireteService 定义了向量数据库的所有可操作接口
+service ScintireteService {
+  // --- 数据库管理 ---
+  // 创建一个新的数据库
+  rpc CreateDatabase(CreateDatabaseRequest) returns (CreateDatabaseResponse);
+  // 删除一个数据库及其所有集合
+  rpc DropDatabase(DropDatabaseRequest) returns (DropDatabaseResponse);
+  // 列出所有数据库
+  rpc ListDatabases(ListDatabasesRequest) returns (ListDatabasesResponse);
+
+  // --- 集合管理 ---
+  // 在指定数据库中创建一个新的集合
+  rpc CreateCollection(CreateCollectionRequest) returns (CreateCollectionResponse);
+  // 删除一个集合
+  rpc DropCollection(DropCollectionRequest) returns (DropCollectionResponse);
+  // 获取集合的元数据信息
+  rpc GetCollectionInfo(GetCollectionInfoRequest) returns (CollectionInfo);
+  // 列出指定数据库中的所有集合
+  rpc ListCollections(ListCollectionsRequest) returns (ListCollectionsResponse);
+
+  // --- 向量数据操作 ---
+  // 插入预先计算好的向量（支持批量，ID由服务端自动生成）
+  rpc InsertVectors(InsertVectorsRequest) returns (InsertVectorsResponse);
+  // 删除指定ID的向量（标记删除）
+  rpc DeleteVectors(DeleteVectorsRequest) returns (DeleteVectorsResponse);
+  // 根据向量进行相似度搜索
+  rpc Search(SearchRequest) returns (SearchResponse);
+
+  // --- 文本自动嵌入与操作 ---
+  // 传入文本，自动调用 embedding API 后插入（支持批量，ID由服务端自动生成）
+  rpc EmbedAndInsert(EmbedAndInsertRequest) returns (EmbedAndInsertResponse);
+  // 传入文本，自动调用 embedding API 后进行搜索
+  rpc EmbedAndSearch(EmbedAndSearchRequest) returns (SearchResponse);
+  // 对文本进行编码，返回向量，便于业务端缓存
+  rpc EmbedText(EmbedTextRequest) returns (EmbedTextResponse);
+  // 获取可用的 embedding 模型列表
+  rpc ListEmbeddingModels(ListEmbeddingModelsRequest) returns (ListEmbeddingModelsResponse);
+
+  // --- 持久化操作 ---
+  // 同步保存 RDB 快照（阻塞操作）
+  rpc Save(SaveRequest) returns (SaveResponse);
+  // 后台异步保存 RDB 快照（非阻塞操作）
+  rpc BgSave(BgSaveRequest) returns (BgSaveResponse);
+}
+
+
+// ===================================
+// 枚举与核心数据结构
+// ===================================
+
+// 距离度量类型
+enum DistanceMetric {
+  DISTANCE_METRIC_UNSPECIFIED = 0; // 未指定，将导致错误
+  L2 = 1;                          // 欧氏距离
+  COSINE = 2;                      // 余弦相似度
+  INNER_PRODUCT = 3;               // 内积
+}
+
+// HNSW 算法的配置参数
+message HnswConfig {
+  int32 m = 1;                // 图中每个节点的最大连接数 (default: 16)
+  int32 ef_construction = 2;  // 构建图时的搜索范围大小 (default: 200)
+}
+
+// 向量数据点
+message Vector {
+  optional uint64 id = 1;            // 向量的唯一ID (服务端自动生成，客户端不需要提供)
+  repeated float elements = 2;       // 向量的浮点数表示
+  google.protobuf.Struct metadata = 3; // 附加的 JSON 元数据
+}
+
+// 带有元数据的文本，用于自动嵌入
+message TextWithMetadata {
+  optional uint64 id = 1;              // 数据的唯一ID (可选，若不提供则自动生成)
+  string text = 2;                     // 原始文本
+  google.protobuf.Struct metadata = 3; // 附加的 JSON 元数据
+}
+
+// 搜索结果项
+message SearchResultItem {
+  optional Vector vector = 1; // 匹配到的向量（包含ID和元数据），当 include_vector=false 时不返回
+  float distance = 2; // 与查询向量的距离/相似度
+  uint64 id = 3; // 向量ID，用于 include_vector=false 时标识结果
+  google.protobuf.Struct metadata = 4; // 元数据，当 include_vector=false 时单独返回
+}
+
+// 集合的元数据信息
+message CollectionInfo {
+  string name = 1;                   // 集合名称
+  int32 dimension = 2;               // 向量维度
+  int64 vector_count = 3;            // 向量总数
+  int64 deleted_count = 4;           // 标记删除的向量数
+  int64 memory_bytes = 5;            // 预估内存占用 (in bytes)
+  DistanceMetric metric_type = 6;    // 距离度量类型
+  HnswConfig hnsw_config = 7;        // HNSW 配置
+}
+
+
+// ===================================
+// 请求/响应消息
+// ===================================
+
+// --- 通用 ---
+message AuthInfo {
+  string password = 1; // 用于简单授权的密码
+}
+
+// --- 数据库 ---
+message CreateDatabaseRequest {
+  AuthInfo auth = 1;
+  string name = 2;
+}
+
+message CreateDatabaseResponse {
+  string name = 1;        // 创建的数据库名称
+  bool success = 2;       // 是否成功
+  string message = 3;     // 返回消息
+}
+
+message DropDatabaseRequest {
+  AuthInfo auth = 1;
+  string name = 2;
+}
+
+message DropDatabaseResponse {
+  string name = 1;               // 删除的数据库名称
+  bool success = 2;              // 是否成功
+  string message = 3;            // 返回消息
+  int32 dropped_collections = 4; // 删除的集合数量
+}
+
+message ListDatabasesRequest {
+  AuthInfo auth = 1;
+}
+
+message ListDatabasesResponse {
+  repeated string names = 1;
+}
+
+// --- 集合 ---
+message CreateCollectionRequest {
+  AuthInfo auth = 1;
+  string db_name = 2;
+  string collection_name = 3;
+  DistanceMetric metric_type = 4;
+  optional HnswConfig hnsw_config = 5; // 创建时可选的 HNSW 参数
+}
+
+message CreateCollectionResponse {
+  string db_name = 1;           // 数据库名称
+  string collection_name = 2;   // 集合名称
+  bool success = 3;             // 是否成功
+  string message = 4;           // 返回消息
+  CollectionInfo info = 5;      // 创建的集合信息
+}
+
+message DropCollectionRequest {
+  AuthInfo auth = 1;
+  string db_name = 2;
+  string collection_name = 3;
+}
+
+message DropCollectionResponse {
+  string db_name = 1;           // 数据库名称
+  string collection_name = 2;   // 集合名称
+  bool success = 3;             // 是否成功
+  string message = 4;           // 返回消息
+  int64 dropped_vectors = 5;    // 删除的向量数量
+}
+
+message GetCollectionInfoRequest {
+  AuthInfo auth = 1;
+  string db_name = 2;
+  string collection_name = 3;
+}
+
+message ListCollectionsRequest {
+  AuthInfo auth = 1;
+  string db_name = 2;
+}
+
+message ListCollectionsResponse {
+  repeated CollectionInfo collections = 1;
+}
+
+// --- 向量操作 ---
+message InsertVectorsRequest {
+  AuthInfo auth = 1;
+  string db_name = 2;
+  string collection_name = 3;
+  repeated Vector vectors = 4;
+}
+
+message InsertVectorsResponse {
+  repeated uint64 inserted_ids = 1; // 服务端生成的向量 ID 列表
+  int32 inserted_count = 2;         // 成功插入的数量
+}
+
+message DeleteVectorsRequest {
+  AuthInfo auth = 1;
+  string db_name = 2;
+  string collection_name = 3;
+  repeated uint64 ids = 4;
+}
+
+message DeleteVectorsResponse {
+  int32 deleted_count = 1; // 成功标记删除的数量
+}
+
+message SearchRequest {
+  AuthInfo auth = 1;
+  string db_name = 2;
+  string collection_name = 3;
+  repeated float query_vector = 4;
+  int32 top_k = 5;
+  optional int32 ef_search = 6; // HNSW 搜索时覆盖默认的 ef_search 参数
+  optional bool include_vector = 7; // 是否在结果中包含向量数据，默认为 false 以提高性能
+  // string filter = 8; // 预留给未来的元数据过滤
+}
+
+message SearchResponse {
+  repeated SearchResultItem results = 1;
+}
+
+// --- 文本嵌入操作 ---
+message EmbedAndInsertRequest {
+  AuthInfo auth = 1;
+  string db_name = 2;
+  string collection_name = 3;
+  repeated TextWithMetadata texts = 4;
+  optional string embedding_model = 5; // 指定嵌入模型，如果未指定则使用服务器默认
+}
+
+message EmbedAndInsertResponse {
+  repeated uint64 inserted_ids = 1; // 服务端生成的向量 ID 列表
+  int32 inserted_count = 2;         // 成功插入的数量
+}
+
+message EmbedTextRequest {
+  AuthInfo auth = 1;
+  repeated string texts = 2;           // 要编码的文本列表
+  optional string embedding_model = 3; // 指定嵌入模型，如果未指定则使用服务器默认
+}
+
+message EmbedTextResponse {
+  repeated EmbedTextResult results = 1;
+}
+
+message EmbedTextResult {
+  string text = 1;                // 原始文本
+  repeated float embedding = 2;   // 编码后的向量
+  int32 index = 3;               // 在请求中的索引位置
+}
+
+message ListEmbeddingModelsRequest {
+  AuthInfo auth = 1;
+}
+
+message ListEmbeddingModelsResponse {
+  repeated EmbeddingModel models = 1;
+  string default_model = 2; // 服务器默认使用的模型
+}
+
+message EmbeddingModel {
+  string id = 1;          // 模型ID
+  string name = 2;        // 模型显示名称
+  int32 dimension = 3;    // 输出向量维度
+  bool available = 4;     // 当前是否可用
+  string description = 5; // 模型描述
+}
+
+message EmbedAndSearchRequest {
+  AuthInfo auth = 1;
+  string db_name = 2;
+  string collection_name = 3;
+  string query_text = 4;
+  int32 top_k = 5;
+  optional string embedding_model = 6;
+  optional int32 ef_search = 7;
+  optional bool include_vector = 8; // 是否在结果中包含向量数据，默认为 false 以提高性能
+  // string filter = 9;
+}
+
+// --- 持久化操作 ---
+message SaveRequest {
+  AuthInfo auth = 1;
+}
+
+message SaveResponse {
+  bool success = 1;
+  string message = 2;
+  int64 snapshot_size = 3; // 快照文件大小（字节）
+  double duration_seconds = 4; // 保存耗时（秒）
+}
+
+message BgSaveRequest {
+  AuthInfo auth = 1;
+}
+
+message BgSaveResponse {
+  bool success = 1;
+  string message = 2;
+  string job_id = 3; // 后台任务ID，用于查询状态
+} 
