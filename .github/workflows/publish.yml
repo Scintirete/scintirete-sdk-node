@@ -26,7 +26,9 @@ jobs:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install dependencies
-        run: npm ci
+        run: |
+          rm -rf node_modules
+          npm ci
 
       - name: Generate protobuf types
         run: npm run gen
