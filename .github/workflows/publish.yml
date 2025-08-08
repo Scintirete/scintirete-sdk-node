@@ -5,6 +5,10 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: write
+  packages: write
+
 jobs:
   publish:
     runs-on: ubuntu-latest
@@ -52,14 +56,23 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Create GitHub Release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: softprops/action-gh-release@v1
         with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
           body: |
-            Changes in this Release
-            - Updated to version ${{ steps.extract_version.outputs.VERSION }}
+            ## Scintirete ${{ github.ref_name }}
+            
+            **Scintirete** - 基于HNSW算法的轻量级向量数据库 Node.js SDK
+            
+            ### 变更内容
+            - 更新到版本 ${{ steps.extract_version.outputs.VERSION }}
+            
+            ### 安装方法
+            ```bash
+            npm install scintirete-sdk-node
+            ```
           draft: false
           prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
